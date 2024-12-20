@@ -752,6 +752,33 @@ class PowerUp:
         self.float_offset = 0
         self.float_speed = 0.1
         self.effect_text = ""  # Texto que describe el efecto
+        self.color = WHITE  # Color por defecto
+        
+        # Variables para el movimiento
+        self.speed_x = random.uniform(2, 4) * random.choice([-1, 1])
+        self.speed_y = random.uniform(2, 4) * random.choice([-1, 1])
+        
+    def move(self):
+        """Mover el powerup y rebotar en los bordes"""
+        if not self.collected:
+            # Actualizar posición
+            self.x += self.speed_x
+            self.y += self.speed_y
+            
+            # Rebotar en los bordes
+            if self.x - self.radius <= 0:
+                self.x = self.radius
+                self.speed_x = abs(self.speed_x)
+            elif self.x + self.radius >= screen_width:
+                self.x = screen_width - self.radius
+                self.speed_x = -abs(self.speed_x)
+                
+            if self.y - self.radius <= 0:
+                self.y = self.radius
+                self.speed_y = abs(self.speed_y)
+            elif self.y + self.radius >= screen_height:
+                self.y = screen_height - self.radius
+                self.speed_y = -abs(self.speed_y)
         
     def collect(self):
         self.collected = True
@@ -762,6 +789,8 @@ class PowerUp:
         if not self.collected:
             # Efecto de flotación
             self.float_offset = math.sin(pygame.time.get_ticks() * self.float_speed) * 5
+            # Mover el powerup
+            self.move()
             return True
             
         if not self.active:
@@ -784,8 +813,8 @@ class PowerUp:
         # Dibujar orbe base con brillo
         glow_radius = self.radius + 5 + abs(self.float_offset/2)
         glow_color = (*self.color, 100)  # Color con alpha para el brillo
-        pygame.draw.circle(surface, glow_color, (int(self.x), int(y_pos)), glow_radius)
-        pygame.draw.circle(surface, self.color, (int(self.x), int(y_pos)), self.radius)
+        pygame.draw.circle(surface, glow_color, (int(self.x), int(y_pos)), int(glow_radius))
+        pygame.draw.circle(surface, self.color, (int(self.x), int(y_pos)), int(self.radius))
         
         # Dibujar texto descriptivo
         text = GAME_FONT.render(self.effect_text, True, WHITE)
@@ -796,29 +825,10 @@ class GoldenPenePowerUp(PowerUp):
     def __init__(self, x, y):
         super().__init__(x, y)
         self.color = GOLD
-        self.duration = 15000  # 10 segundos
+        self.duration = 15000  # 15 segundos
         self.score_multiplier = 2
         self.effect_text = "x2 SCORE"
         self.glow_intensity = 0  # Para el efecto pulsante
-        
-    def update(self):
-        if not self.collected:
-            # Efecto de flotación
-            self.float_offset = math.sin(pygame.time.get_ticks() * self.float_speed) * 5
-            return True
-            
-        if not self.active:
-            return False
-            
-        # Actualizar el efecto pulsante
-        self.glow_intensity = abs(math.sin(pygame.time.get_ticks() * 0.003)) * 255
-            
-        # Verificar si el powerup sigue activo
-        current_time = pygame.time.get_ticks()
-        if current_time - self.start_time >= self.duration:
-            self.active = False
-            return False
-        return True
 
     def apply_effect(self, game):
         game.score_multiplier *= self.score_multiplier
@@ -1094,7 +1104,7 @@ class MatrixRainEffect(Effect):
 class Game:
     def __init__(self):
         self.score = 0
-        self._lives = 5  # Variable privada para las vidas
+        self._lives = 5
         self.enemies = []
         self.spawn_timer = 0
         self.spawn_delay = 60
@@ -1105,7 +1115,67 @@ class Game:
         self.paused = False
         self.lost_focus = False
         
-        # Sistema de sonido simplificado
+        # Sistema de progresión
+        self.level = 1
+        self.score_for_next_level = 10000  # Puntos necesarios para subir de nivel
+        self.max_level = 10
+        
+        # Configuración de dificultad por nivel
+        self.difficulty_config = {
+            # nivel: {velocidad_base, delay_spawn, probabilidades_enemigos}
+            1: {
+                'base_speed': 2.0,
+                'spawn_delay': 60,
+                'enemy_probs': {'normal': 100, 'fast': 0, 'split': 0, 'shooter': 0}
+            },
+            2: {
+                'base_speed': 2.2,
+                'spawn_delay': 55,
+                'enemy_probs': {'normal': 70, 'fast': 30, 'split': 0, 'shooter': 0}
+            },
+            3: {
+                'base_speed': 2.4,
+                'spawn_delay': 50,
+                'enemy_probs': {'normal': 60, 'fast': 30, 'split': 10, 'shooter': 0}
+            },
+            4: {
+                'base_speed': 2.6,
+                'spawn_delay': 45,
+                'enemy_probs': {'normal': 50, 'fast': 30, 'split': 15, 'shooter': 5}
+            },
+            5: {
+                'base_speed': 2.8,
+                'spawn_delay': 40,
+                'enemy_probs': {'normal': 40, 'fast': 30, 'split': 20, 'shooter': 10}
+            },
+            6: {
+                'base_speed': 3.0,
+                'spawn_delay': 35,
+                'enemy_probs': {'normal': 30, 'fast': 35, 'split': 20, 'shooter': 15}
+            },
+            7: {
+                'base_speed': 3.2,
+                'spawn_delay': 30,
+                'enemy_probs': {'normal': 25, 'fast': 35, 'split': 25, 'shooter': 15}
+            },
+            8: {
+                'base_speed': 3.4,
+                'spawn_delay': 25,
+                'enemy_probs': {'normal': 20, 'fast': 35, 'split': 25, 'shooter': 20}
+            },
+            9: {
+                'base_speed': 3.6,
+                'spawn_delay': 20,
+                'enemy_probs': {'normal': 15, 'fast': 35, 'split': 30, 'shooter': 20}
+            },
+            10: {
+                'base_speed': 4.0,
+                'spawn_delay': 15,
+                'enemy_probs': {'normal': 10, 'fast': 35, 'split': 35, 'shooter': 20}
+            }
+        }
+        
+        # Sistema de sonido
         self.sound_enabled = True
         try:
             music_path = resource_path(os.path.join("assets", "music", "background.mp3"))
@@ -1123,11 +1193,12 @@ class Game:
         # Sistema de powerups
         self.powerups = []
         self.active_powerups = []
-        self.powerup_spawn_timer = 0
-        self.powerup_spawn_delay = 1800
+        self.powerup_spawn_timer = 900  # 15 segundos (60 FPS * 15)
+        self.powerup_spawn_delay = 1800  # 30 segundos entre powerups
         self.score_multiplier = 1
         self.has_shield = False
         self.berserker_mode = False
+        self.powerup_particles = []  # Para los efectos de rebote
         
         # Sistema de combos
         self.combo_count = 0
@@ -1185,9 +1256,81 @@ class Game:
         else:
             pygame.mixer.music.pause()
 
+    def check_level_up(self):
+        """Comprobar si el jugador debe subir de nivel"""
+        if self.level < self.max_level and self.score >= self.score_for_next_level:
+            self.level += 1
+            self.score_for_next_level *= 2  # Duplicar puntos necesarios para siguiente nivel
+            
+            # Efecto visual de subida de nivel
+            self.effects.append(FloatingTextEffect(
+                screen_width//2,
+                screen_height//2,
+                f"¡NIVEL {self.level}!",
+                GOLD,
+                2000,  # 2 segundos
+                scale=2.0,
+                wave=True
+            ))
+            
+            # Efecto de partículas doradas
+            for _ in range(20):
+                angle = random.uniform(0, math.pi * 2)
+                distance = random.uniform(50, 150)
+                x = screen_width//2 + math.cos(angle) * distance
+                y = screen_height//2 + math.sin(angle) * distance
+                self.effects.append(ParticleEffect(x, y, GOLD, 30))
+            
+            if self.sound_enabled:
+                play_sound('powerup')  # Usar el sonido de powerup para el nivel
+            
+            # Actualizar configuración de spawn
+            config = self.difficulty_config[self.level]
+            self.spawn_delay = config['spawn_delay']
+            
+            # Actualizar velocidad de enemigos existentes
+            for enemy in self.enemies:
+                enemy.speed = config['base_speed']
+
+    def spawn_enemy(self):
+        """Genera nuevos enemigos basados en el nivel actual"""
+        if self.spawn_timer <= 0:
+            config = self.difficulty_config[self.level]
+            probs = config['enemy_probs']
+            
+            # Calcular probabilidad total
+            total_prob = sum(probs.values())
+            r = random.randint(1, total_prob)
+            cumulative = 0
+            
+            # Seleccionar tipo de enemigo
+            enemy_type = None
+            for type_name, prob in probs.items():
+                cumulative += prob
+                if r <= cumulative:
+                    if type_name == 'normal':
+                        enemy_type = NormalEnemy
+                    elif type_name == 'fast':
+                        enemy_type = FastEnemy
+                    elif type_name == 'split':
+                        enemy_type = SplitEnemy
+                    elif type_name == 'shooter':
+                        enemy_type = ShooterEnemy
+                    break
+            
+            if enemy_type:
+                enemy = enemy_type()
+                enemy.speed = config['base_speed']  # Aplicar velocidad según nivel
+                self.enemies.append(enemy)
+            
+            self.spawn_timer = self.spawn_delay
+
     def update(self):
         if self.game_over or self.paused:
             return
+
+        # Comprobar subida de nivel
+        self.check_level_up()
 
         self.spawn_timer -= 1
         self.spawn_enemy()
@@ -1305,9 +1448,16 @@ class Game:
         for enemy in self.enemies:
             enemy.draw(temp_surface)
 
-        # Dibujar powerups
+        # Dibujar powerups y sus efectos de partículas
         for powerup in self.powerups:
             powerup.draw(temp_surface)
+        
+        # Dibujar partículas de rebote
+        for particle in self.powerup_particles:
+            alpha = int(255 * (particle['life'] / 20))
+            color = (*particle['color'], alpha)
+            pygame.draw.circle(temp_surface, color, 
+                             (int(particle['x']), int(particle['y'])), 2)
 
         # Dibujar efectos
         for effect in self.effects:
@@ -1438,6 +1588,17 @@ class Game:
             surface.fill((0, 0, 0, 0))
             surface.blit(temp_surface, (0, 0))
 
+        # Dibujar nivel actual
+        level_text = render_combo_text(
+            f"NIVEL {self.level}",
+            GOLD if self.level == self.max_level else WHITE,
+            None,
+            self.level == self.max_level,  # Glow solo en nivel máximo
+            1.0
+        )
+        level_rect = level_text.get_rect(topleft=(20, 20))
+        temp_surface.blit(level_text, level_rect)
+
     def update_combo(self):
         """Actualiza el multiplicador de combo basado en el contador actual"""
         old_multiplier = self.combo_multiplier
@@ -1463,36 +1624,6 @@ class Game:
         """Reinicia el contador y multiplicador de combo"""
         self.combo_count = 0
         self.combo_multiplier = 1
-
-    def spawn_enemy(self):
-        """Genera nuevos enemigos basados en el temporizador"""
-        if self.spawn_timer <= 0:
-            # Probabilidades de spawn para cada tipo de enemigo
-            enemy_types = [
-                (NormalEnemy, 0.4),
-                (SplitEnemy, 0.2),
-                (ShooterEnemy, 0.2),
-                (FastEnemy, 0.2)
-            ]
-            
-            # Seleccionar tipo de enemigo basado en probabilidades
-            total_prob = sum(prob for _, prob in enemy_types)
-            r = random.uniform(0, total_prob)
-            cumulative = 0
-            selected_type = None
-            
-            for enemy_type, prob in enemy_types:
-                cumulative += prob
-                if r <= cumulative:
-                    selected_type = enemy_type
-                    break
-            
-            if selected_type:
-                self.enemies.append(selected_type())
-            
-            # Reducir el delay de spawn gradualmente
-            self.spawn_delay = max(30, self.spawn_delay - 0.1)
-            self.spawn_timer = self.spawn_delay
 
     def update_powerups(self):
         """Actualiza el sistema de powerups"""
@@ -1533,10 +1664,20 @@ class Game:
                 powerup.remove_effect(self)
                 self.active_powerups.remove(powerup)
         
-        # Actualizar powerups en el campo
+        # Actualizar powerups en el campo y sus partículas
         for powerup in self.powerups[:]:
             if not powerup.update():
                 self.powerups.remove(powerup)
+            else:
+                # Actualizar partículas de rebote
+                new_particles = []
+                for particle in self.powerup_particles:
+                    particle['x'] += particle['dx']
+                    particle['y'] += particle['dy']
+                    particle['life'] -= 1
+                    if particle['life'] > 0:
+                        new_particles.append(particle)
+                self.powerup_particles = new_particles
 
     def check_powerup_collision(self, mouse_x, mouse_y):
         """Comprueba si el jugador recoge algún powerup"""
