@@ -1,4 +1,4 @@
-Sistema de Powerups:
+✅ Sistema de Powerups:
     ✅ Pene Dorado (raro): Duplica todos los puntos por 10 segundos
         - Implementado como un powerup que aparece cada ~30 segundos
         - Añadido efecto visual dorado brillante
@@ -17,109 +17,72 @@ Sistema de Powerups:
         - Dura 3 segundos
         - ¡Super satisfactorio de usar!
 
-Notas de Implementación v1.0:
-- Creada clase PowerUp base con sistema de timers y efectos
-- Los powerups aparecen como orbes flotantes con animación
-- Sistema de partículas mejorado para efectos más épicos
-- Añadido sonido "whoosh" al recoger powerups
-- El Modo Berserker es definitivamente el más divertido
-- Balanceo: Ajustada la frecuencia de aparición para no hacerlo muy fácil
+✅ Progresión y Dificultad:
+    ✅ Niveles con dificultad incremental (1-10)
+        - Nivel 1-3: Enemigos básicos, velocidad normal
+        - Nivel 4-6: Introducción de enemigos que disparan y se dividen
+        - Nivel 7-8: Más enemigos rápidos y agresivos
+        - Nivel 9-10: Todos los tipos de enemigos, máxima dificultad
+    ✅ Nuevos tipos de enemigos:
+        - ✅ Penes que se dividen al cortarlos
+        - ✅ Penes que disparan
+        - ✅ Penes que persiguen más rápido
+    ✅ Boss fights:
+        - Boss: Pene Negro
+        - Más grande y resistente
+        - Requiere múltiples cortes (10-50 según nivel)
+        - Gira rápidamente
+        - Fases de vulnerabilidad
+        - Barra de vida
+        - Efectos especiales al derrotarlo
 
-Progresión y Dificultad:
-    Niveles o "Waves" con más enemigos
-    Nuevos tipos de enemigos:
-        - Penes que se dividen al cortarlos
-        - Penes que disparan
-        - Penes que te persiguen más rápido
-    Boss fights cada cierta cantidad de puntos
+✅ Efectos Visuales:
+    ✅ Sistema de partículas mejorado
+    ✅ Efectos de tiempo bullet-time
+    ✅ Screen shake en momentos importantes
+    ✅ Efectos de luz y brillos
+    ✅ Sistema de combos con efectos visuales
 
-Efectos Visuales Mejorados:
-    Rastros de sangre cuando cortas penes
-    Efectos de tiempo bullet-time en momentos épicos
-    Más partículas y efectos de luz
-    Screen shake más dramático en combos altos
+✅ Sistema de Sonido:
+    ✅ Efectos de sonido para:
+        - Powerups
+        - Cortes
+        - Colisiones
+        - Game over
+        - Combos
+    ✅ Música de fondo
+    ✅ Control de volumen (tecla M)
 
-Sistema de Logros:
-    "Eunuco": Corta 1000 penes
-    "Ninja Silencioso": Sobrevive 5 minutos
-    "Combo Master": Alcanza x10 combo
-    "Jefe viene!": Pausa el juego 100 veces
+Próximas Características a Implementar:
 
-Características Sociales:
-    Tabla de puntuaciones global
-    Compartir screenshot de puntuación
-    Modo competitivo (2 jugadores)
-    Estadísticas divertidas (penes cortados, tiempo jugado, etc.)
+1. Sistema de Logros:
+    - "Eunuco": Corta 1000 penes
+    - "Ninja Silencioso": Sobrevive 5 minutos
+    - "Combo Master": Alcanza x10 combo
+    - "¡Jefe viene!": Pausa el juego 100 veces
 
-Personalización:
-    Diferentes estilos de estela del mouse
-    Temas visuales (modo oscuro/claro)
-    Efectos de sonido personalizables
-    Fondos desbloqueables
+2. Características Sociales:
+    - Tabla de puntuaciones global
+    - Compartir screenshot de puntuación
+    - Modo competitivo (2 jugadores)
+    - Estadísticas divertidas
 
-Modo "Oficina":
-    Hotkey para minimizar instantáneamente
-    Modo "ventana falsa" (parece Excel)
-    Sonidos desactivables rápidamente
-    Sistema de "alertas de jefe"
+3. Personalización:
+    - Diferentes estilos de estela del mouse
+    - Temas visuales (modo oscuro/claro)
+    - Efectos de sonido personalizables
+    - Fondos desbloqueables
 
-✅ Mejoras Implementadas:
-    ✅ Sistema de Powerups:
-        - Pene Dorado: Duplica puntos por 10 segundos
-            • Efecto visual de espiral dorada
-            • Texto flotante "¡SCORE x2!"
-            • Partículas doradas al activar/desactivar
-        - Escudo Temporal: Protege de un golpe
-            • Burbuja protectora pulsante
-            • Anillos de energía expandiéndose
-            • Contador de tiempo restante
-        - Slow Motion: Ralentiza enemigos
-            • Efecto matrix con lluvia de código
-            • Texto ondulante "¡MATRIX MODE!"
-            • Transición suave al volver a velocidad normal
-        - Modo Berserker: Corta todo a su paso
-            • Explosión de líneas de fuego
-            • Ondas de choque expansivas
-            • Partículas rojas intensas
-            • Texto vibrante con contador
+4. Modo "Oficina":
+    - Hotkey para minimizar instantáneamente
+    - Modo "ventana falsa" (parece Excel)
+    - Sistema de "alertas de jefe"
 
-    ✅ Mejoras Visuales:
-        - Colisiones más precisas y visibles
-        - Cabeza del pene rediseñada (más realista)
-        - Efectos de texto mejorados
-        - Sistema de partículas avanzado
-
-Próximos Pasos:
-
-1. Sistema de Sonido:
-    - Efectos de sonido para powerups
-    - Sonido de corte y colisión
-    - Música de fondo dinámica
-    - Control de volumen
-
-2. Nuevos Tipos de Enemigos:
-    - Penes que se dividen al cortarlos
-    - Penes que disparan
-    - Penes que persiguen más rápido
-    - Mini-jefes con patrones especiales
-
-3. Sistema de Progresión:
-    - Niveles con dificultad incremental
-    - Desbloqueo de nuevas habilidades
-    - Sistema de experiencia
-    - Logros y recompensas
-
-4. Mejoras de Interfaz:
+5. Mejoras de Interfaz:
     - Menú principal
     - Pantalla de opciones
     - Tutorial interactivo
-    - Tabla de puntuaciones
-
-5. Características Sociales:
-    - Compartir puntuación
-    - Modo competitivo
-    - Estadísticas globales
-    - Rankings diarios/semanales
+    - Tabla de puntuaciones local
 
 6. Optimizaciones:
     - Mejorar rendimiento
@@ -127,14 +90,14 @@ Próximos Pasos:
     - Soporte para diferentes resoluciones
     - Modo de bajo consumo
 
-7. Personalización:
-    - Skins para el cursor
-    - Temas visuales
-    - Efectos personalizables
-    - Modos de juego alternativos
+7. Boss Fights:
+    - Jefes cada 5 niveles
+    - Patrones de ataque únicos
+    - Recompensas especiales
+    - Cinemáticas
 
-8. Modo "Oficina Segura":
-    - Tecla de pánico mejorada
-    - Camuflaje instantáneo
-    - Modo silencioso
-    - Icono discreto
+8. Modos de Juego Adicionales:
+    - Modo supervivencia
+    - Modo zen (sin muerte)
+    - Modo speedrun
+    - Desafíos diarios

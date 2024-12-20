@@ -292,9 +292,13 @@ class BaseEnemy:
         total_height = max(self.height, self.head_base_width)
         body = pygame.Surface((self.width, total_height), pygame.SRCALPHA)
         
+        # Dibujar el cuerpo con el color y alpha actuales
+        color_body_with_alpha = (*self.color_body[:3], self.alpha)  # Asegurar formato RGBA
+        color_head_with_alpha = (*self.color_head[:3], self.alpha)  # Asegurar formato RGBA
+        
         # Dibujar el cuerpo
         body_y = (total_height - self.height) // 2
-        pygame.draw.rect(body, (*self.color_body, self.alpha), 
+        pygame.draw.rect(body, color_body_with_alpha, 
                         (0, body_y, self.width - self.head_size, self.height))
         
         # Dibujar la cabeza
@@ -305,7 +309,7 @@ class BaseEnemy:
             (self.head_size, (total_height + self.head_tip_width) // 2),
             (0, (total_height + self.head_base_width) // 2)
         ]
-        pygame.draw.polygon(head_surface, (*self.color_head, self.alpha), head_points)
+        pygame.draw.polygon(head_surface, color_head_with_alpha, head_points)
         
         # Agregar la cabeza al cuerpo
         body.blit(head_surface, (self.width - self.head_size, 0))
@@ -1060,7 +1064,7 @@ class ExpandingRingEffect(Effect):
         radius = self.size * progress
         alpha = int(255 * (1 - progress))
         pygame.draw.circle(surface, (*self.color, alpha), (int(self.x), int(self.y)), int(radius), 2)
-
+        
 class ShockwaveEffect(Effect):
     def __init__(self, x, y, color, radius, duration):
         super().__init__(x, y, color, radius, duration)
@@ -1213,7 +1217,12 @@ class Game:
         # Crear los corazones iniciales
         self.hearts = []
         self.create_hearts()
-
+        
+        self.boss = None
+        self.in_boss_fight = False
+        self.boss_timer = 0
+        self.boss_spawn_interval = random.randint(900, 1800)  # 15-30 segundos a 60 FPS
+        
     @property
     def lives(self):
         return self._lives
@@ -1260,6 +1269,10 @@ class Game:
         """Comprobar si el jugador debe subir de nivel"""
         if self.level < self.max_level and self.score >= self.score_for_next_level:
             self.level += 1
+            # Resetear el flag de boss spawned al subir de nivel
+            if hasattr(self, 'boss_spawned_for_level'):
+                delattr(self, 'boss_spawned_for_level')
+            
             self.score_for_next_level *= 2  # Duplicar puntos necesarios para siguiente nivel
             
             # Efecto visual de subida de nivel
@@ -1331,76 +1344,36 @@ class Game:
 
         # Comprobar subida de nivel
         self.check_level_up()
+        
+        # Comprobar spawn de boss
+        self.check_boss_spawn()
 
-        self.spawn_timer -= 1
-        self.spawn_enemy()
-        self.update_powerups()
-
-        mouse_x, mouse_y = pygame.mouse.get_pos()
-        self.check_powerup_collision(mouse_x, mouse_y)
-
-        # Comprobar colisiones con balas
-        for enemy in self.enemies:
-            if isinstance(enemy, ShooterEnemy):
-                for projectile in enemy.projectiles[:]:
-                    if projectile.check_collision(mouse_x, mouse_y):
-                        if self.has_shield:
-                            if self.sound_enabled:
-                                play_sound('shield_break')
-                            self.has_shield = False
-                            self.effects.append(ParticleEffect(
-                                mouse_x, mouse_y,
-                                BLUE,
-                                30
-                            ))
-                            for powerup in self.active_powerups[:]:
-                                if isinstance(powerup, ShieldPowerUp):
-                                    powerup.remove_effect(self)
-                                    self.active_powerups.remove(powerup)
-                                    break
-                        else:
-                            if self.sound_enabled:
-                                play_sound('hit')
-                            self.lives -= 1
-                            self.reset_combo()
-                            self.effects.append(ParticleEffect(
-                                mouse_x, mouse_y,
-                                (255, 100, 0),  # Color naranja para las balas
-                                20
-                            ))
-                            self.screen_shake.start(20, 5)
-                            if self.lives <= 0:
-                                if self.sound_enabled:
-                                    play_sound('game_over')
-                                self.game_over = True
-                        projectile.active = False
-                        enemy.projectiles.remove(projectile)
-
-        for enemy in self.enemies[:]:
-            collision_result = enemy.update(mouse_x, mouse_y)
+        # Actualizar boss fight si está activo
+        if self.in_boss_fight and self.boss:
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            collision_result = self.boss.update(mouse_x, mouse_y)
             
-            if collision_result == "body_collision" or (self.berserker_mode and collision_result):
-                if self.sound_enabled:
-                    play_sound('slash')
-                self.enemies.remove(enemy)
-                self.score += 1000 * self.combo_multiplier * self.score_multiplier
-                self.combo_count += 1
-                self.update_combo()
-                
-                slash_angle = enemy.angle + random.uniform(-30, 30)
-                slash_color = RED if self.berserker_mode else BLUE
-                self.effects.append(SlashEffect(
-                    enemy.x, enemy.y,
-                    slash_angle,
-                    slash_color,
-                    20
-                ))
-                self.effects.append(ParticleEffect(
-                    enemy.x, enemy.y,
-                    slash_color,
-                    15
-                ))
-            
+            if collision_result == "body_collision":
+                if self.boss.take_hit():
+                    if self.sound_enabled:
+                        play_sound('slash')
+                    self.score += 500 * self.combo_multiplier * self.score_multiplier
+                    self.combo_count += 1
+                    self.update_combo()
+                    
+                    # Efectos al golpear al boss
+                    self.screen_shake.start(10, 3)
+                    self.effects.append(SlashEffect(
+                        self.boss.x, self.boss.y,
+                        random.uniform(0, 360),
+                        RED,
+                        30
+                    ))
+                    
+                    # Verificar si el boss fue derrotado
+                    if self.boss.hits_taken >= self.boss.hits_required:
+                        self.boss_defeated()
+                        
             elif collision_result == "head_collision":
                 if self.has_shield:
                     if self.sound_enabled:
@@ -1419,7 +1392,6 @@ class Game:
                 else:
                     if self.sound_enabled:
                         play_sound('hit')
-                    self.enemies.remove(enemy)
                     self.lives -= 1
                     self.reset_combo()
                     self.effects.append(ParticleEffect(
@@ -1432,6 +1404,74 @@ class Game:
                         if self.sound_enabled:
                             play_sound('game_over')
                         self.game_over = True
+        else:
+            # Lógica normal de enemigos solo si no hay boss fight
+            self.spawn_timer -= 1
+            self.spawn_enemy()
+
+        self.update_powerups()
+
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        self.check_powerup_collision(mouse_x, mouse_y)
+
+        # Actualizar enemigos normales solo si no hay boss fight
+        if not self.in_boss_fight:
+            for enemy in self.enemies[:]:
+                collision_result = enemy.update(mouse_x, mouse_y)
+                
+                if collision_result == "body_collision" or (self.berserker_mode and collision_result):
+                    if self.sound_enabled:
+                        play_sound('slash')
+                    self.enemies.remove(enemy)
+                    self.score += 1000 * self.combo_multiplier * self.score_multiplier
+                    self.combo_count += 1
+                    self.update_combo()
+                    
+                    slash_angle = enemy.angle + random.uniform(-30, 30)
+                    slash_color = RED if self.berserker_mode else BLUE
+                    self.effects.append(SlashEffect(
+                        enemy.x, enemy.y,
+                        slash_angle,
+                        slash_color,
+                        20
+                    ))
+                    self.effects.append(ParticleEffect(
+                        enemy.x, enemy.y,
+                        slash_color,
+                        15
+                    ))
+                
+                elif collision_result == "head_collision":
+                    if self.has_shield:
+                        if self.sound_enabled:
+                            play_sound('shield_break')
+                        self.has_shield = False
+                        self.effects.append(ParticleEffect(
+                            mouse_x, mouse_y,
+                            BLUE,
+                            30
+                        ))
+                        for powerup in self.active_powerups[:]:
+                            if isinstance(powerup, ShieldPowerUp):
+                                powerup.remove_effect(self)
+                                self.active_powerups.remove(powerup)
+                                break
+                    else:
+                        if self.sound_enabled:
+                            play_sound('hit')
+                        self.enemies.remove(enemy)
+                        self.lives -= 1
+                        self.reset_combo()
+                        self.effects.append(ParticleEffect(
+                            mouse_x, mouse_y,
+                            RED,
+                            20
+                        ))
+                        self.screen_shake.start(20, 5)
+                        if self.lives <= 0:
+                            if self.sound_enabled:
+                                play_sound('game_over')
+                            self.game_over = True
 
         self.mouse_trail.update((mouse_x, mouse_y))
         self.effects = [effect for effect in self.effects if effect.update()]
@@ -1443,10 +1483,6 @@ class Game:
 
         # Dibujar la estela del ratón
         self.mouse_trail.draw(temp_surface)
-
-        # Dibujar enemigos
-        for enemy in self.enemies:
-            enemy.draw(temp_surface)
 
         # Dibujar powerups y sus efectos de partículas
         for powerup in self.powerups:
@@ -1462,6 +1498,15 @@ class Game:
         # Dibujar efectos
         for effect in self.effects:
             effect.draw(temp_surface)
+
+        # Dibujar enemigos normales o boss (NO AMBOS)
+        if not self.in_boss_fight:
+            for enemy in self.enemies:
+                enemy.draw(temp_surface)
+        else:
+            # Dibujar boss si está activo
+            if self.boss:
+                self.boss.draw(temp_surface)
 
         # Dibujar corazones y contador de vidas
         for heart in self.hearts:
@@ -1702,6 +1747,220 @@ class Game:
         else:
             pygame.mixer.music.unpause()
 
+    def check_boss_spawn(self):
+        """Verifica si es momento de spawner un boss"""
+        if self.in_boss_fight:
+            return
+            
+        # Boss cada 3 niveles (3, 6, 9...)
+        if self.level > 0 and self.level % 3 == 0 and not hasattr(self, 'boss_spawned_for_level'):
+            print(f"Spawneando boss en nivel {self.level}")  # Debug
+            self.boss_spawned_for_level = self.level
+            self.spawn_boss()
+            return
+            
+        # Después del nivel 10, boss aleatorio
+        if self.level >= 10:
+            self.boss_timer += 1
+            if self.boss_timer >= self.boss_spawn_interval:
+                self.spawn_boss()
+                # Resetear timer con nuevo intervalo aleatorio
+                self.boss_timer = 0
+                self.boss_spawn_interval = random.randint(900, 1800)
+    
+    def spawn_boss(self):
+        """Genera un nuevo boss fight"""
+        self.in_boss_fight = True
+        
+        # Calcular nivel efectivo del boss
+        if self.level >= 10:
+            boss_level = self.level + random.randint(1, 5)  # Más difícil en nivel 10+
+        else:
+            boss_level = self.level
+            
+        self.boss = BossEnemy(boss_level)
+        
+        # Efectos de entrada del boss
+        self.screen_shake.start(60, 10)
+        
+        # Mensaje personalizado según el nivel
+        if self.level >= 10:
+            mensaje = "¡BOSS SORPRESA!"
+        else:
+            mensaje = "¡BOSS FIGHT!"
+            
+        self.effects.append(FloatingTextEffect(
+            screen_width//2,
+            screen_height//2,
+            mensaje,
+            RED,
+            2000,
+            scale=2.0,
+            shake=True
+        ))
+        
+        # Sonido más intenso para boss de nivel alto
+        if self.sound_enabled:
+            if self.level >= 10:
+                play_sound('boss_appear', 1.0)  # Volumen máximo
+            else:
+                play_sound('boss_appear', 0.8)
+
+    def boss_defeated(self):
+        """Maneja la derrota de un boss"""
+        self.in_boss_fight = False
+        self.boss = None
+        
+        # Bonus de puntos por derrotar al boss
+        bonus = 5000 * self.level
+        self.score += bonus
+        
+        # Efectos de victoria
+        self.screen_shake.start(30, 8)
+        self.effects.append(FloatingTextEffect(
+            screen_width//2,
+            screen_height//2,
+            "¡BOSS DERROTADO!",
+            GOLD,
+            2000,
+            scale=2.0,
+            wave=True
+        ))
+        self.effects.append(FloatingTextEffect(
+            screen_width//2,
+            screen_height//2 + 60,
+            f"+{bonus} PUNTOS",
+            GOLD,
+            1500,
+            scale=1.5
+        ))
+        
+        # Explosión de partículas
+        for _ in range(30):
+            self.effects.append(ParticleEffect(
+                self.boss.x, self.boss.y,
+                GOLD,
+                50
+            ))
+            
+        if self.sound_enabled:
+            play_sound('boss_defeated')
+
+class BossEnemy(BaseEnemy):
+    """Jefe: Pene Negro - más grande, más resistente, gira rápido"""
+    def __init__(self, level):
+        super().__init__()
+        # Escalar tamaño según nivel
+        size_multiplier = 1 + (level * 0.1)  # 10% más grande por nivel
+        self.width *= 3.5 * size_multiplier
+        self.height *= 2.5 * size_multiplier
+        self.head_size *= 3 * size_multiplier
+        self.head_base_width *= 2.5 * size_multiplier
+        self.head_tip_width *= 2.5 * size_multiplier
+        
+        # Características especiales
+        self.speed = 1.5 + (level * 0.1)  # 10% más rápido por nivel
+        self.rotation_speed = 4 + (level * 0.3)  # Reducido de 8 a 4 base, y de 0.5 a 0.3 por nivel
+        self.hits_required = 10 + (level * 4)
+        self.hits_taken = 0
+        
+        # Color más oscuro según nivel
+        darkness = max(20, 40 - level * 2)  # Más negro en niveles altos
+        self.base_color = (darkness, darkness, darkness)  # Guardar color base
+        self.color_body = self.base_color
+        self.color_head = (darkness + 20, darkness + 20, darkness + 20)
+        
+        # Ajustar timers según nivel
+        self.vulnerable_duration = max(30, 60 - level * 2)  # Menos tiempo vulnerable
+        self.invulnerable_duration = min(120, 90 + level * 2)  # Más tiempo invulnerable
+        
+        # Stats iniciales
+        self.health_percentage = 1.0
+        self.is_vulnerable = True
+        self.vulnerable_timer = self.vulnerable_duration
+        
+        # Nivel para referencia
+        self.level = level
+        
+        print(f"Boss creado - Nivel: {level}, Hits requeridos: {self.hits_required}")  # Debug
+        
+    def take_hit(self):
+        """Procesa un golpe recibido"""
+        if self.is_vulnerable:
+            self.hits_taken += 1
+            self.health_percentage = 1 - (self.hits_taken / self.hits_required)
+            self.is_vulnerable = False
+            self.vulnerable_timer = self.invulnerable_duration
+            return True
+        return False
+        
+    def update(self, mouse_x, mouse_y):
+        result = super().update(mouse_x, mouse_y)
+        
+        # Actualizar timer de vulnerabilidad
+        if self.vulnerable_timer > 0:
+            self.vulnerable_timer -= 1
+            if self.vulnerable_timer <= 0:
+                self.is_vulnerable = not self.is_vulnerable
+                self.vulnerable_timer = (
+                    self.vulnerable_duration if self.is_vulnerable 
+                    else self.invulnerable_duration
+                )
+        
+        # Comportamiento más agresivo en niveles altos
+        if self.level >= 10:
+            # Movimiento errático
+            self.x += math.sin(pygame.time.get_ticks() * 0.01) * self.speed
+            self.y += math.cos(pygame.time.get_ticks() * 0.01) * self.speed
+            
+            # Rotación más impredecible
+            if random.random() < 0.05:  # 5% de probabilidad por frame
+                self.rotation_speed *= -1
+        
+        # Girar más rápido cuando está herido pero con límites más razonables
+        base_rotation = 4 + (self.level * 0.3)  # Reducido para coincidir con el init
+        max_rotation_bonus = 3  # Reducido de 6 a 3
+        self.rotation_speed = base_rotation + ((1 - self.health_percentage) * max_rotation_bonus)
+        
+        # Limitar la velocidad máxima de rotación
+        self.rotation_speed = min(self.rotation_speed, 8)  # Nunca más rápido que 8
+        
+        # Cambiar color según estado
+        if self.is_vulnerable:
+            self.alpha = int(128 + abs(math.sin(pygame.time.get_ticks() * 0.01)) * 127)
+            self.color_body = self.base_color
+            self.color_head = tuple(min(255, x + 20) for x in self.base_color)
+        else:
+            self.alpha = 100  # Más transparente cuando invulnerable
+            self.color_body = self.base_color
+            self.color_head = tuple(min(255, x + 10) for x in self.base_color)
+        
+        return result
+
+    def draw(self, surface):
+        super().draw(surface)
+        
+        # Dibujar barra de vida
+        bar_width = self.width * 1.5
+        bar_height = 10
+        bar_x = self.x - bar_width/2
+        bar_y = self.y - self.height - 20
+        
+        # Fondo de la barra
+        pygame.draw.rect(surface, (60, 60, 60, 180), 
+                        (bar_x, bar_y, bar_width, bar_height))
+        
+        # Barra de vida actual
+        health_width = bar_width * self.health_percentage
+        health_color = (
+            int(255 * (1 - self.health_percentage)),  # Rojo aumenta al bajar vida
+            int(255 * self.health_percentage),        # Verde disminuye al bajar vida
+            0,
+            200
+        )
+        pygame.draw.rect(surface, health_color,
+                        (bar_x, bar_y, health_width, bar_height))
+
 def main():
     clock = pygame.time.Clock()
     game = Game()
@@ -1728,7 +1987,7 @@ def main():
             elif event.type == pygame.ACTIVEEVENT:
                 if event.state == 2:  # Estado de foco de ventana
                     if not event.gain:  # Perdió el foco
-                        game.paused = True
+                        game.toggle_pause()
                         game.lost_focus = True
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if game.paused and game.lost_focus:
