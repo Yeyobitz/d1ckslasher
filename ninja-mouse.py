@@ -6,6 +6,66 @@ import os
 
 # Inicializar Pygame
 pygame.init()
+pygame.mixer.init()
+
+def resource_path(relative_path):
+    """ Obtener la ruta absoluta a los recursos, funciona para dev y para PyInstaller """
+    try:
+        # PyInstaller crea un directorio temporal y almacena la ruta en _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    
+    return os.path.join(base_path, relative_path)
+
+# Colores (ajustados para mejor visibilidad con alpha)
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+SALMON = (255, 160, 160)
+BLACK = (0, 0, 0)
+BLUE = (0, 0, 255)
+ORANGE = (255, 140, 0)
+PURPLE = (160, 32, 240)
+GOLD = (255, 215, 0)
+
+# Sistema de sonido simplificado
+SOUNDS = {}
+
+def init_sounds():
+    """Inicializar los sonidos del juego"""
+    sound_files = {
+        'slash': 'slash.wav',
+        'hit': 'hit.wav',
+        'powerup': 'powerup.wav',
+        'shield_break': 'shield_break.wav',
+        'berserker': 'berserker.wav',
+        'matrix': 'matrix.wav',
+        'golden': 'golden.wav',
+        'game_over': 'game_over.wav',
+        'combo': 'combo.wav'
+    }
+    
+    for sound_name, filename in sound_files.items():
+        try:
+            sound_path = resource_path(os.path.join("assets", "sounds", filename))
+            if os.path.exists(sound_path):
+                SOUNDS[sound_name] = pygame.mixer.Sound(sound_path)
+            else:
+                print(f"Archivo de sonido no encontrado: {sound_path}")
+        except Exception as e:
+            print(f"Error al cargar sonido {filename}: {e}")
+
+def play_sound(sound_name, volume=1.0):
+    """Reproducir un sonido de forma segura"""
+    if sound_name in SOUNDS and SOUNDS[sound_name]:
+        try:
+            SOUNDS[sound_name].set_volume(volume)
+            SOUNDS[sound_name].play()
+        except Exception as e:
+            print(f"Error al reproducir sonido {sound_name}: {e}")
+
+# Inicializar sonidos
+init_sounds()
 
 # Configurar la ventana transparente
 info = pygame.display.Info()
@@ -18,6 +78,7 @@ if sys.platform == 'win32':
     import win32gui # type: ignore
     import win32con # type: ignore
     import win32api # type: ignore
+    import win32process # type: ignore
     from ctypes import windll, byref, c_int # type: ignore
 
     # Crear la ventana con el flag de layered
@@ -38,28 +99,14 @@ if sys.platform == 'win32':
     DwmExtendFrameIntoClientArea(hwnd, byref(c_int(margins[0])))
 
     try:
-        # Intentar poner la ventana al frente de manera segura
-        current_thread = win32api.GetCurrentThreadId()
-        foreground_thread = win32api.GetWindowThreadProcessId(win32gui.GetForegroundWindow())[0]
-        win32api.AttachThreadInput(current_thread, foreground_thread, True)
+        # Simplificar la puesta al frente de la ventana
         win32gui.SetForegroundWindow(hwnd)
-        win32api.AttachThreadInput(current_thread, foreground_thread, False)
     except Exception as e:
         print(f"No se pudo poner la ventana al frente: {e}")
 else:
     screen = pygame.display.set_mode((screen_width, screen_height), pygame.NOFRAME | pygame.SRCALPHA)
 
 pygame.display.set_caption("Ninja Mouse")
-
-# Colores (ajustados para mejor visibilidad con alpha)
-WHITE = (255, 255, 255)
-RED = (255, 0, 0)
-SALMON = (255, 160, 160)
-BLACK = (0, 0, 0)
-BLUE = (0, 0, 255)
-ORANGE = (255, 140, 0)
-PURPLE = (160, 32, 240)
-GOLD = (255, 215, 0)
 
 # Estilos de combo
 COMBO_STYLES = {
@@ -100,16 +147,6 @@ COMBO_STYLES = {
     }
 }
 
-def resource_path(relative_path):
-    """ Obtener la ruta absoluta a los recursos, funciona para dev y para PyInstaller """
-    try:
-        # PyInstaller crea un directorio temporal y almacena la ruta en _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    
-    return os.path.join(base_path, relative_path)
-
 # Modificar la sección de carga de fuentes:
 font_paths = [
     resource_path(os.path.join("assets", "PressStart2P-Regular.ttf")),
@@ -118,18 +155,11 @@ font_paths = [
 GAME_FONT = None
 SCORE_FONT = None
 
-for font_path in font_paths:
-    try:
-        GAME_FONT = pygame.font.Font(font_path, 36)
-        SCORE_FONT = pygame.font.Font(font_path, 48)
-        print(f"Fuente cargada desde: {font_path}")
-        break
-    except Exception as e:
-        print(f"No se pudo cargar la fuente desde {font_path}: {e}")
-        continue
-
-if not GAME_FONT or not SCORE_FONT:
-    print("No se pudo cargar la fuente Press Start 2P, usando fuente por defecto")
+# Cargar fuentes silenciosamente
+try:
+    GAME_FONT = pygame.font.Font(resource_path(os.path.join("assets", "PressStart2P-Regular.ttf")), 36)
+    SCORE_FONT = pygame.font.Font(resource_path(os.path.join("assets", "PressStart2P-Regular.ttf")), 48)
+except:
     GAME_FONT = pygame.font.Font(None, 36)
     SCORE_FONT = pygame.font.Font(None, 48)
 
@@ -190,12 +220,14 @@ def render_combo_text(text, color, border_color=None, glow=False, scale=1.0):
     
     return final_surface
 
-class Enemy:
+class BaseEnemy:
     def __init__(self):
-        # Dimensiones totales
-        self.width = 60  # Largo total
-        self.height = 20  # Ancho total
-        self.head_size = 20  # Tamaño de la cabeza (cuadrada)
+        # Dimensiones base
+        self.width = 60
+        self.height = 20
+        self.head_size = 20
+        self.head_base_width = self.height * 1.5
+        self.head_tip_width = self.height * 0.8
         
         # Posición inicial aleatoria en los bordes
         side = random.choice(['top', 'bottom', 'left', 'right'])
@@ -214,19 +246,29 @@ class Enemy:
         
         self.angle = 0
         self.target_angle = 0
-        self.speed = 2  # Velocidad reducida (antes era 3)
-        self.rotation_speed = 4  # Velocidad de rotación aumentada (antes era 2)
+        self.speed = 2
+        self.rotation_speed = 4
+        self.color_body = SALMON
+        self.color_head = RED
+        self.alpha = 200
+
+    def get_head_tip_position(self):
+        """Obtener la posición de la punta"""
+        angle_rad = math.radians(self.angle)
+        tip_x = self.x + math.cos(angle_rad) * self.width/2
+        tip_y = self.y + math.sin(angle_rad) * self.width/2
+        return tip_x, tip_y
 
     def move(self, target_x, target_y):
-        # Calcular dirección hacia el mouse
+        # Calcular dirección hacia el objetivo
         dx = target_x - self.x
         dy = target_y - self.y
         distance = math.sqrt(dx**2 + dy**2)
         
-        # Calcular el ángulo objetivo hacia el mouse
+        # Calcular el ángulo objetivo
         self.target_angle = math.degrees(math.atan2(dy, dx))
         
-        # Ajustar el ángulo actual gradualmente hacia el ángulo objetivo
+        # Ajustar el ángulo gradualmente
         angle_diff = (self.target_angle - self.angle) % 360
         if angle_diff > 180:
             angle_diff -= 360
@@ -247,125 +289,261 @@ class Enemy:
 
     def draw(self, surface):
         # Crear superficie para el cuerpo con alpha
-        body = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        total_height = max(self.height, self.head_base_width)
+        body = pygame.Surface((self.width, total_height), pygame.SRCALPHA)
         
-        # Dibujar el cuerpo con alpha
-        pygame.draw.rect(body, (*SALMON, 200), (0, 0, self.width - self.head_size, self.height))
+        # Dibujar el cuerpo
+        body_y = (total_height - self.height) // 2
+        pygame.draw.rect(body, (*self.color_body, self.alpha), 
+                        (0, body_y, self.width - self.head_size, self.height))
         
-        # Dibujar la cabeza con alpha y forma más definida
-        head_surface = pygame.Surface((self.head_size, self.height), pygame.SRCALPHA)
-        
-        # Dibujar la cabeza como un trapecio
+        # Dibujar la cabeza
+        head_surface = pygame.Surface((self.head_size, total_height), pygame.SRCALPHA)
         head_points = [
-            (0, 0),  # Esquina superior izquierda
-            (self.head_size, self.height * 0.15),  # Esquina superior derecha (más estrecha)
-            (self.head_size, self.height * 0.85),  # Esquina inferior derecha (más estrecha)
-            (0, self.height)  # Esquina inferior izquierda
+            (0, (total_height - self.head_base_width) // 2),
+            (self.head_size, (total_height - self.head_tip_width) // 2),
+            (self.head_size, (total_height + self.head_tip_width) // 2),
+            (0, (total_height + self.head_base_width) // 2)
         ]
-        pygame.draw.polygon(head_surface, (*RED, 200), head_points)
+        pygame.draw.polygon(head_surface, (*self.color_head, self.alpha), head_points)
         
         # Agregar la cabeza al cuerpo
         body.blit(head_surface, (self.width - self.head_size, 0))
         
-        # Rotar superficie
+        # Rotar y dibujar
         rotated = pygame.transform.rotate(body, -self.angle)
         rect = rotated.get_rect(center=(self.x, self.y))
         surface.blit(rotated, rect)
+        
+        # DEBUG: Dibujar áreas de colisión
+        # self.draw_collision_areas(surface)
 
-    def check_body_collision(self, mouse_x, mouse_y):
-        # Convertir coordenadas del mouse al espacio local del enemigo
+    def draw_collision_areas(self, surface):
+        # Dibujar área de colisión de la cabeza
+        tip_x, tip_y = self.get_head_tip_position()
+        pygame.draw.circle(surface, WHITE, (int(tip_x), int(tip_y)), 
+                         int(self.head_tip_width/2), 1)
+        
+        # Dibujar área de colisión del cuerpo
         angle_rad = math.radians(self.angle)
-        dx = mouse_x - self.x
-        dy = mouse_y - self.y
+        body_points = [
+            (-self.width/2, -self.height/2),
+            (self.width/2 - self.head_size, -self.height/2),
+            (self.width/2 - self.head_size, self.height/2),
+            (-self.width/2, self.height/2)
+        ]
         
-        # Rotar el punto del mouse al espacio local del rectángulo
-        rotated_x = dx * math.cos(-angle_rad) - dy * math.sin(-angle_rad)
-        rotated_y = dx * math.sin(-angle_rad) + dy * math.cos(-angle_rad)
+        rotated_points = []
+        for x, y in body_points:
+            rx = x * math.cos(angle_rad) - y * math.sin(angle_rad)
+            ry = x * math.sin(angle_rad) + y * math.cos(angle_rad)
+            rotated_points.append((self.x + rx, self.y + ry))
         
-        # Definir las zonas de colisión del cuerpo
-        body_width = self.width - self.head_size
-        
-        # Zona principal del cuerpo (más ancha en el centro)
-        in_body_x = rotated_x < 0 and abs(rotated_x) < body_width/2
-        in_body_y = abs(rotated_y) < self.height/2
-        
-        # Zona de corte efectivo (más grande cuando el corte es perpendicular)
-        cut_angle = abs(math.degrees(math.atan2(rotated_y, rotated_x)) % 180 - 90)
-        cut_threshold = self.height * (1 + math.sin(math.radians(cut_angle)))
-        
-        return in_body_x and abs(rotated_y) < cut_threshold
+        if len(rotated_points) >= 4:
+            pygame.draw.lines(surface, WHITE, True, rotated_points, 1)
 
     def check_head_collision(self, mouse_x, mouse_y):
-        # Convertir coordenadas del mouse al espacio local del enemigo
-        angle_rad = math.radians(self.angle)
+        tip_x, tip_y = self.get_head_tip_position()
+        dx = mouse_x - tip_x
+        dy = mouse_y - tip_y
+        distance = math.sqrt(dx * dx + dy * dy)
+        return distance < self.head_tip_width/2
+
+    def check_body_collision(self, mouse_x, mouse_y):
         dx = mouse_x - self.x
         dy = mouse_y - self.y
+        angle_rad = math.radians(-self.angle)
+        rotated_x = dx * math.cos(angle_rad) - dy * math.sin(angle_rad)
+        rotated_y = dx * math.sin(angle_rad) + dy * math.cos(angle_rad)
         
-        # Rotar el punto del mouse al espacio local del rectángulo
-        rotated_x = dx * math.cos(-angle_rad) - dy * math.sin(-angle_rad)
-        rotated_y = dx * math.sin(-angle_rad) + dy * math.cos(-angle_rad)
+        body_left = -self.width/2
+        body_right = self.width/2 - self.head_size
+        body_top = -self.height/2
+        body_bottom = self.height/2
         
-        # Definir la zona de la cabeza con una forma más precisa y generosa
-        head_start = (self.width - self.head_size)
-        
-        # Crear una zona de colisión más amplia en forma de trapecio
-        head_width_base = self.height  # Base más ancha en la parte trasera de la cabeza
-        head_width_tip = self.height * 0.7  # Más estrecho en la punta
-        
-        # Calcular el ancho de la zona de colisión en el punto actual
-        progress = (rotated_x - head_start) / self.head_size
-        if 0 <= progress <= 1:
-            current_width = head_width_base * (1 - progress) + head_width_tip * progress
-            # Zona de colisión más generosa cerca de la punta
-            if progress > 0.7:  # Últimos 30% de la cabeza
-                current_width *= 1.3  # 30% más ancha en la punta
-            
-            # Comprobar si el punto está dentro del trapecio
-            return abs(rotated_y) < current_width/2
-        
-        return False
+        return (body_left < rotated_x < body_right and 
+                body_top < rotated_y < body_bottom)
 
     def update(self, mouse_x, mouse_y):
-        # Nuevo método para actualizar la posición y comprobar colisiones
         self.move(mouse_x, mouse_y)
-        
-        # Comprobar colisiones y devolver el resultado
         if self.check_head_collision(mouse_x, mouse_y):
             return "head_collision"
         elif self.check_body_collision(mouse_x, mouse_y):
             return "body_collision"
         return None
 
+class NormalEnemy(BaseEnemy):
+    """Enemigo básico que persigue al jugador"""
+    def __init__(self):
+        super().__init__()
+
+class SplitEnemy(BaseEnemy):
+    """Enemigo que se divide en dos al ser cortado"""
+    def __init__(self, size=1.0, x=None, y=None):
+        super().__init__()
+        # Ajustar tamaño según el nivel de división
+        self.width *= size
+        self.height *= size
+        self.head_size *= size
+        self.head_base_width *= size
+        self.head_tip_width *= size
+        self.speed = 2 + (1 - size)  # Más pequeño = más rápido
+        
+        # Si se especifica posición, usarla (para las divisiones)
+        if x is not None and y is not None:
+            self.x = x
+            self.y = y
+        
+        self.size = size
+        self.color_body = (255, 180, 180)  # Un poco más rosado
+        self.color_head = (255, 50, 50)    # Rojo más brillante
+
+    def split(self):
+        """Retorna dos enemigos más pequeños"""
+        if self.size > 0.3:  # No dividir si es muy pequeño
+            new_size = self.size * 0.7
+            angle1 = self.angle + 45
+            angle2 = self.angle - 45
+            dist = 20 * self.size
+            
+            # Calcular posiciones para los nuevos enemigos
+            x1 = self.x + math.cos(math.radians(angle1)) * dist
+            y1 = self.y + math.sin(math.radians(angle1)) * dist
+            x2 = self.x + math.cos(math.radians(angle2)) * dist
+            y2 = self.y + math.sin(math.radians(angle2)) * dist
+            
+            return [
+                SplitEnemy(new_size, x1, y1),
+                SplitEnemy(new_size, x2, y2)
+            ]
+        return []
+
+class ShooterEnemy(BaseEnemy):
+    """Enemigo que dispara proyectiles"""
+    def __init__(self):
+        super().__init__()
+        self.shoot_delay = 120  # 2 segundos a 60 FPS
+        self.shoot_timer = random.randint(0, self.shoot_delay)
+        self.color_body = (255, 200, 150)  # Naranja claro
+        self.color_head = (255, 100, 0)    # Naranja oscuro
+        self.projectiles = []
+        self.speed = 1.5  # Más lento que el normal
+
+    def update(self, mouse_x, mouse_y):
+        result = super().update(mouse_x, mouse_y)
+        
+        # Actualizar temporizador de disparo
+        self.shoot_timer -= 1
+        if self.shoot_timer <= 0:
+            self.shoot()
+            self.shoot_timer = self.shoot_delay
+        
+        # Actualizar proyectiles
+        for proj in self.projectiles[:]:
+            proj.update()
+            if not proj.active:
+                self.projectiles.remove(proj)
+        
+        return result
+
+    def shoot(self):
+        """Dispara un proyectil hacia el jugador"""
+        tip_x, tip_y = self.get_head_tip_position()
+        self.projectiles.append(Projectile(tip_x, tip_y, self.angle))
+
+    def draw(self, surface):
+        super().draw(surface)
+        # Dibujar proyectiles
+        for proj in self.projectiles:
+            proj.draw(surface)
+
+class Projectile:
+    def __init__(self, x, y, angle):
+        self.x = x
+        self.y = y
+        self.angle = angle
+        self.speed = 5
+        self.radius = 5
+        self.active = True
+        self.color = (255, 100, 0)  # Naranja
+        
+    def check_collision(self, mouse_x, mouse_y):
+        """Comprobar si la bala colisiona con el mouse"""
+        dx = mouse_x - self.x
+        dy = mouse_y - self.y
+        distance = math.sqrt(dx * dx + dy * dy)
+        return distance < self.radius * 2  # Radio un poco más grande para mejor jugabilidad
+        
+    def update(self):
+        # Mover en la dirección del ángulo
+        self.x += math.cos(math.radians(self.angle)) * self.speed
+        self.y += math.sin(math.radians(self.angle)) * self.speed
+        
+        # Desactivar si sale de la pantalla
+        if (self.x < -50 or self.x > screen_width + 50 or
+            self.y < -50 or self.y > screen_height + 50):
+            self.active = False
+    
+    def draw(self, surface):
+        pygame.draw.circle(surface, self.color, 
+                         (int(self.x), int(self.y)), self.radius)
+
+class FastEnemy(BaseEnemy):
+    """Enemigo que persigue al jugador más rápido"""
+    def __init__(self):
+        super().__init__()
+        self.speed = 4  # Doble de velocidad
+        self.color_body = (200, 160, 255)  # Púrpura claro
+        self.color_head = (160, 32, 240)   # Púrpura
+        self.rotation_speed = 6  # Más ágil
+
+    def move(self, target_x, target_y):
+        super().move(target_x, target_y)
+        # Movimiento serpenteante
+        self.angle += math.sin(pygame.time.get_ticks() * 0.005) * 2
+
+# Reemplazar la clase Enemy existente con NormalEnemy
+Enemy = NormalEnemy
+
 class MouseTrail:
     def __init__(self):
         self.positions = []  # Lista de posiciones anteriores del mouse
-        self.max_length = 20  # Longitud base de la estela aumentada
+        self.max_length = 15  # Reducido de 20 a 15 para menos rastro
         self.last_pos = None
         self.last_time = pygame.time.get_ticks()
-        self.base_width = 8  # Ancho base de la estela
+        self.base_width = 6  # Reducido de 8 a 6
+        self.collision_radius = 2
+        self.collision_glow = 6
+        self.smoothing_factor = 0.5  # Factor de suavizado
 
     def update(self, pos):
         current_time = pygame.time.get_ticks()
-        speed = 0  # Inicializar speed con un valor por defecto
         
         if self.last_pos:
-            dx = pos[0] - self.last_pos[0]
-            dy = pos[1] - self.last_pos[1]
+            # Aplicar suavizado al movimiento
+            smoothed_x = self.last_pos[0] + (pos[0] - self.last_pos[0]) * self.smoothing_factor
+            smoothed_y = self.last_pos[1] + (pos[1] - self.last_pos[1]) * self.smoothing_factor
+            smoothed_pos = (smoothed_x, smoothed_y)
+            
+            dx = smoothed_pos[0] - self.last_pos[0]
+            dy = smoothed_pos[1] - self.last_pos[1]
             distance = math.sqrt(dx*dx + dy*dy)
             dt = current_time - self.last_time
             speed = distance / dt if dt > 0 else 0
             
-            # Hacer la estela más reactiva a la velocidad
-            self.max_length = int(20 + speed * 1.2)  # Más larga
+            # Hacer la estela más reactiva a la velocidad pero con límites
+            self.max_length = min(15 + int(speed * 0.8), 20)
+            width = min(self.base_width + speed * 0.2, 15)
+        else:
+            smoothed_pos = pos
+            width = self.base_width
         
-        # Calcular el ancho basado en la velocidad
-        width = min(self.base_width + speed * 0.3, 20)
-        self.positions.append((pos, width))  # Guardar posición y ancho
+        self.positions.append((smoothed_pos, width))
         
         if len(self.positions) > self.max_length:
             self.positions.pop(0)
         
-        self.last_pos = pos
+        self.last_pos = smoothed_pos
         self.last_time = current_time
 
     def draw(self, surface):
@@ -374,19 +552,29 @@ class MouseTrail:
         
         # Dibujar la estela con degradado y ancho variable
         for i in range(len(self.positions) - 1):
-            alpha = int(200 * (i / len(self.positions)))  # Más opaco
+            alpha = int(150 * (i / len(self.positions)))  # Reducido de 200 a 150
             color = (*BLUE, alpha)
             start_pos, start_width = self.positions[i]
             end_pos, end_width = self.positions[i + 1]
             
-            # Dibujar línea gruesa usando múltiples líneas
             width = (start_width + end_width) / 2
             pygame.draw.line(surface, color, start_pos, end_pos, int(width))
+        
+        # Dibujar el punto de colisión
+        if self.positions:
+            current_pos = self.positions[-1][0]
+            # Dibujar brillo exterior más sutil
+            glow_color = (*BLUE, 80)  # Reducido de 100 a 80
+            pygame.draw.circle(surface, glow_color, current_pos, self.collision_glow)
+            # Dibujar punto central
+            pygame.draw.circle(surface, BLUE, current_pos, self.collision_radius)
 
 class ScreenShake:
     def __init__(self):
         self.duration = 0
         self.intensity = 0
+        self.offset_x = 0
+        self.offset_y = 0
         
     def start(self, duration, intensity):
         self.duration = duration
@@ -394,12 +582,21 @@ class ScreenShake:
         
     def get_offset(self):
         if self.duration <= 0:
-            return 0, 0
+            return (0, 0)
         
+        # Reducir la intensidad gradualmente
+        current_intensity = self.intensity * (self.duration / self.duration)
         self.duration -= 1
-        dx = random.randint(-self.intensity, self.intensity)
-        dy = random.randint(-self.intensity, self.intensity)
-        return dx, dy
+        
+        if self.duration <= 0:
+            return (0, 0)
+            
+        # Usar seno y coseno para un movimiento más suave
+        time = pygame.time.get_ticks() / 50.0  # Reducir la velocidad de vibración
+        self.offset_x = math.sin(time) * current_intensity
+        self.offset_y = math.cos(time) * current_intensity
+        
+        return (int(self.offset_x), int(self.offset_y))
 
 class Effect:
     def __init__(self, x, y, color, size, duration):
@@ -435,20 +632,45 @@ class Heart:
         self.x = x
         self.y = y
         self.size = size
+        self.pulse = random.uniform(0, 2 * math.pi)  # Fase aleatoria para que no pulsen todos igual
+        self.glow_intensity = random.uniform(0, math.pi)  # Para el efecto de brillo
     
     def draw(self, surface):
-        # Dibujar un corazón usando pygame
-        radius = self.size // 4
+        # Efecto de pulsación suave
+        self.pulse = (self.pulse + 0.05) % (2 * math.pi)
+        self.glow_intensity = (self.glow_intensity + 0.03) % (2 * math.pi)
+        pulse_scale = 1.0 + math.sin(self.pulse) * 0.1
+        current_size = self.size * pulse_scale
         
-        # Crear los círculos que forman el corazón
-        pygame.draw.circle(surface, RED, (self.x - radius, self.y), radius)
-        pygame.draw.circle(surface, RED, (self.x + radius, self.y), radius)
+        # Efecto de brillo
+        glow_alpha = int(128 + math.sin(self.glow_intensity) * 64)
+        glow_color = (*RED, glow_alpha)
+        glow_size = current_size * 1.2
         
-        # Crear el triángulo que forma la punta del corazón
+        # Dibujar el brillo
+        glow_radius = glow_size // 4
+        pygame.draw.circle(surface, glow_color, (int(self.x - glow_radius), int(self.y)), int(glow_radius))
+        pygame.draw.circle(surface, glow_color, (int(self.x + glow_radius), int(self.y)), int(glow_radius))
+        
+        glow_points = [
+            (self.x - glow_size//2, self.y),
+            (self.x + glow_size//2, self.y),
+            (self.x, self.y + glow_size//2)
+        ]
+        pygame.draw.polygon(surface, glow_color, glow_points)
+        
+        # Dibujar el corazón principal
+        radius = current_size // 4
+        
+        # Círculos del corazón
+        pygame.draw.circle(surface, RED, (int(self.x - radius), int(self.y)), int(radius))
+        pygame.draw.circle(surface, RED, (int(self.x + radius), int(self.y)), int(radius))
+        
+        # Triángulo de la punta
         points = [
-            (self.x - self.size//2, self.y),
-            (self.x + self.size//2, self.y),
-            (self.x, self.y + self.size//2)
+            (self.x - current_size//2, self.y),
+            (self.x + current_size//2, self.y),
+            (self.x, self.y + current_size//2)
         ]
         pygame.draw.polygon(surface, RED, points)
 
@@ -518,10 +740,361 @@ class ParticleEffect(Effect):
             
             pygame.draw.circle(surface, color, (int(x), int(y)), int(size))
 
+class PowerUp:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.radius = 20
+        self.active = False
+        self.collected = False
+        self.start_time = 0
+        self.duration = 0
+        self.float_offset = 0
+        self.float_speed = 0.1
+        self.effect_text = ""  # Texto que describe el efecto
+        
+    def collect(self):
+        self.collected = True
+        self.active = True
+        self.start_time = pygame.time.get_ticks()
+        
+    def update(self):
+        if not self.collected:
+            # Efecto de flotación
+            self.float_offset = math.sin(pygame.time.get_ticks() * self.float_speed) * 5
+            return True
+            
+        if not self.active:
+            return False
+            
+        # Verificar si el powerup sigue activo
+        current_time = pygame.time.get_ticks()
+        if current_time - self.start_time >= self.duration:
+            self.active = False
+            return False
+        return True
+        
+    def draw(self, surface):
+        if self.collected:
+            return
+            
+        # Posición con efecto de flotación
+        y_pos = self.y + self.float_offset
+        
+        # Dibujar orbe base con brillo
+        glow_radius = self.radius + 5 + abs(self.float_offset/2)
+        glow_color = (*self.color, 100)  # Color con alpha para el brillo
+        pygame.draw.circle(surface, glow_color, (int(self.x), int(y_pos)), glow_radius)
+        pygame.draw.circle(surface, self.color, (int(self.x), int(y_pos)), self.radius)
+        
+        # Dibujar texto descriptivo
+        text = GAME_FONT.render(self.effect_text, True, WHITE)
+        text_rect = text.get_rect(center=(self.x, y_pos - self.radius - 20))
+        surface.blit(text, text_rect)
+
+class GoldenPenePowerUp(PowerUp):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        self.color = GOLD
+        self.duration = 15000  # 10 segundos
+        self.score_multiplier = 2
+        self.effect_text = "x2 SCORE"
+        self.glow_intensity = 0  # Para el efecto pulsante
+        
+    def update(self):
+        if not self.collected:
+            # Efecto de flotación
+            self.float_offset = math.sin(pygame.time.get_ticks() * self.float_speed) * 5
+            return True
+            
+        if not self.active:
+            return False
+            
+        # Actualizar el efecto pulsante
+        self.glow_intensity = abs(math.sin(pygame.time.get_ticks() * 0.003)) * 255
+            
+        # Verificar si el powerup sigue activo
+        current_time = pygame.time.get_ticks()
+        if current_time - self.start_time >= self.duration:
+            self.active = False
+            return False
+        return True
+
+    def apply_effect(self, game):
+        game.score_multiplier *= self.score_multiplier
+        # Efecto visual dorado explosivo en espiral
+        for i in range(12):  # 12 anillos en espiral
+            angle = i * 30  # Distribuir en 360 grados
+            distance = i * 20  # Incrementar distancia
+            x = screen_width//2 + math.cos(math.radians(angle)) * distance
+            y = screen_height//2 + math.sin(math.radians(angle)) * distance
+            game.effects.append(ParticleEffect(
+                x, y,
+                GOLD,
+                30
+            ))
+        # Efecto de texto flotante
+        game.effects.append(FloatingTextEffect(
+            screen_width//2,
+            screen_height//2,
+            "¡SCORE x2!",
+            GOLD,
+            2000,  # 2 segundos
+            scale=2.0
+        ))
+
+    def remove_effect(self, game):
+        game.score_multiplier //= self.score_multiplier
+        # Efecto de desvanecimiento
+        game.effects.append(FloatingTextEffect(
+            screen_width//2,
+            screen_height//2,
+            "Score Normal",
+            GOLD,
+            1000,
+            scale=1.0
+        ))
+
+class ShieldPowerUp(PowerUp):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        self.color = BLUE
+        self.duration = 15000  # 15 segundos
+        self.shield_active = False
+        self.effect_text = "SHIELD"
+        
+    def apply_effect(self, game):
+        self.shield_active = True
+        game.has_shield = True
+        # Efecto de escudo expandiéndose
+        for radius in range(10, 100, 10):
+            game.effects.append(ExpandingRingEffect(
+                game.mouse_trail.positions[-1][0][0],
+                game.mouse_trail.positions[-1][0][1],
+                BLUE,
+                radius,
+                500  # 0.5 segundos
+            ))
+        # Efecto de texto flotante
+        game.effects.append(FloatingTextEffect(
+            game.mouse_trail.positions[-1][0][0],
+            game.mouse_trail.positions[-1][0][1],
+            "¡ESCUDO ACTIVADO!",
+            BLUE,
+            1500
+        ))
+
+    def remove_effect(self, game):
+        self.shield_active = False
+        game.has_shield = False
+        # Efecto de escudo rompiéndose
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        for _ in range(10):
+            angle = random.uniform(0, math.pi * 2)
+            speed = random.uniform(2, 5)
+            dx = math.cos(angle) * speed
+            dy = math.sin(angle) * speed
+            game.effects.append(ParticleEffect(
+                mouse_x,
+                mouse_y,
+                BLUE,
+                10
+            ))
+
+class SlowMotionPowerUp(PowerUp):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        self.color = (0, 255, 0)  # Verde Matrix
+        self.duration = 10000  # 5 segundos
+        self.slow_factor = 0.5
+        self.effect_text = "SLOW-MO"
+        
+    def apply_effect(self, game):
+        for enemy in game.enemies:
+            enemy.speed *= self.slow_factor
+        # Efecto matrix en cascada
+        for i in range(20):  # 20 columnas de código matrix
+            x = random.randint(0, screen_width)
+            game.effects.append(MatrixRainEffect(
+                x, 0,
+                self.color,
+                3000,  # 3 segundos
+                screen_height
+            ))
+        # Efecto de texto flotante
+        game.effects.append(FloatingTextEffect(
+            screen_width//2,
+            screen_height//2,
+            "¡MATRIX MODE!",
+            self.color,
+            1500,
+            wave=True
+        ))
+
+    def remove_effect(self, game):
+        for enemy in game.enemies:
+            enemy.speed /= self.slow_factor
+        # Efecto de velocidad normal
+        game.effects.append(FloatingTextEffect(
+            screen_width//2,
+            screen_height//2,
+            "¡Velocidad Normal!",
+            self.color,
+            1000,
+            wave=True
+        ))
+
+class BerserkerPowerUp(PowerUp):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        self.color = RED
+        self.duration = 10000  # 3 segundos
+        self.effect_text = "BERSERKER"
+        
+    def apply_effect(self, game):
+        game.berserker_mode = True
+        game.mouse_trail.color = RED
+        game.mouse_trail.width = 10
+        # Efecto de explosión en anillo
+        for angle in range(0, 360, 10):  # 36 líneas de fuego
+            game.effects.append(SlashEffect(
+                game.mouse_trail.positions[-1][0][0],
+                game.mouse_trail.positions[-1][0][1],
+                angle,
+                RED,
+                40
+            ))
+        # Ondas de choque
+        for radius in range(20, 200, 40):
+            game.effects.append(ShockwaveEffect(
+                game.mouse_trail.positions[-1][0][0],
+                game.mouse_trail.positions[-1][0][1],
+                RED,
+                radius,
+                1000  # 1 segundo
+            ))
+        # Efecto de texto flotante
+        game.effects.append(FloatingTextEffect(
+            game.mouse_trail.positions[-1][0][0],
+            game.mouse_trail.positions[-1][0][1],
+            "¡BERSERKER MODE!",
+            RED,
+            1500,
+            shake=True
+        ))
+
+    def remove_effect(self, game):
+        game.berserker_mode = False
+        game.mouse_trail.color = BLUE
+        game.mouse_trail.width = 5
+        # Efecto de desactivación
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        game.effects.append(ShockwaveEffect(
+            mouse_x,
+            mouse_y,
+            RED,
+            100,
+            500
+        ))
+
+# Nuevos efectos
+class FloatingTextEffect(Effect):
+    def __init__(self, x, y, text, color, duration, scale=1.0, wave=False, shake=False):
+        super().__init__(x, y, color, 0, duration)
+        self.text = text
+        self.scale = scale
+        self.wave = wave
+        self.shake = shake
+        
+    def draw(self, surface):
+        progress = (pygame.time.get_ticks() - self.start_time) / self.duration
+        if progress >= 1:
+            return
+            
+        # Calcular posición
+        y_offset = -50 * progress  # Subir
+        x_offset = 0
+        
+        if self.wave:
+            x_offset = math.sin(progress * 10) * 20
+        if self.shake:
+            x_offset += random.randint(-3, 3)
+            y_offset += random.randint(-3, 3)
+            
+        # Calcular alpha y escala
+        alpha = int(255 * (1 - progress))
+        current_scale = self.scale * (1 + math.sin(progress * math.pi) * 0.3)
+        
+        # Renderizar texto con efectos
+        text = render_combo_text(
+            self.text,
+            (*self.color, alpha),
+            None,
+            True,
+            current_scale
+        )
+        
+        # Posicionar y dibujar
+        rect = text.get_rect(center=(self.x + x_offset, self.y + y_offset))
+        surface.blit(text, rect)
+
+class ExpandingRingEffect(Effect):
+    def __init__(self, x, y, color, max_radius, duration):
+        super().__init__(x, y, color, max_radius, duration)
+        
+    def draw(self, surface):
+        progress = (pygame.time.get_ticks() - self.start_time) / self.duration
+        if progress >= 1:
+            return
+            
+        radius = self.size * progress
+        alpha = int(255 * (1 - progress))
+        pygame.draw.circle(surface, (*self.color, alpha), (int(self.x), int(self.y)), int(radius), 2)
+
+class ShockwaveEffect(Effect):
+    def __init__(self, x, y, color, radius, duration):
+        super().__init__(x, y, color, radius, duration)
+        
+    def draw(self, surface):
+        progress = (pygame.time.get_ticks() - self.start_time) / self.duration
+        if progress >= 1:
+            return
+            
+        radius = self.size * progress
+        thickness = int(10 * (1 - progress))
+        alpha = int(255 * (1 - progress))
+        
+        pygame.draw.circle(surface, (*self.color, alpha), (int(self.x), int(self.y)), int(radius), thickness)
+
+class MatrixRainEffect(Effect):
+    def __init__(self, x, y, color, duration, height):
+        super().__init__(x, y, color, 0, duration)
+        self.height = height
+        self.chars = []
+        for i in range(0, height, 20):
+            self.chars.append({
+                'y': y - i,
+                'char': random.choice('01'),
+                'alpha': random.randint(50, 255)
+            })
+        
+    def draw(self, surface):
+        progress = (pygame.time.get_ticks() - self.start_time) / self.duration
+        if progress >= 1:
+            return
+            
+        for char in self.chars:
+            char['y'] += 5
+            if random.random() < 0.1:
+                char['char'] = random.choice('01')
+            
+            text = GAME_FONT.render(char['char'], True, (*self.color, char['alpha']))
+            surface.blit(text, (self.x, char['y']))
+
 class Game:
     def __init__(self):
         self.score = 0
-        self.lives = 3
+        self._lives = 5  # Variable privada para las vidas
         self.enemies = []
         self.spawn_timer = 0
         self.spawn_delay = 60
@@ -532,127 +1105,190 @@ class Game:
         self.paused = False
         self.lost_focus = False
         
+        # Sistema de sonido simplificado
+        self.sound_enabled = True
+        try:
+            music_path = resource_path(os.path.join("assets", "music", "background.mp3"))
+            if os.path.exists(music_path):
+                pygame.mixer.music.load(music_path)
+                pygame.mixer.music.set_volume(0.5)
+                pygame.mixer.music.play(-1)
+            else:
+                print("Archivo de música no encontrado")
+                self.sound_enabled = False
+        except Exception as e:
+            print(f"Error al cargar la música: {e}")
+            self.sound_enabled = False
+        
+        # Sistema de powerups
+        self.powerups = []
+        self.active_powerups = []
+        self.powerup_spawn_timer = 0
+        self.powerup_spawn_delay = 1800
+        self.score_multiplier = 1
+        self.has_shield = False
+        self.berserker_mode = False
+        
         # Sistema de combos
         self.combo_count = 0
         self.combo_multiplier = 1
         self.combo_thresholds = {
-            10: 2,   # 10 penes = x2
-            20: 3,   # 20 penes = x3
-            40: 4,   # 40 penes = x4
-            100: 5   # 100 penes = x5
+            10: 2,
+            20: 3,
+            40: 4,
+            100: 5
         }
         
-        # Crear los corazones centrados en la parte inferior
-        heart_spacing = 50
-        total_width = heart_spacing * 2
-        start_x = (screen_width - total_width) // 2
-        self.hearts = [
-            Heart(start_x + i * heart_spacing, screen_height - 50)
-            for i in range(3)
-        ]
+        # Crear los corazones iniciales
+        self.hearts = []
+        self.create_hearts()
 
-    def toggle_pause(self):
-        self.paused = not self.paused
+    @property
+    def lives(self):
+        return self._lives
 
-    def draw_pause_menu(self, surface):
-        # Crear una capa semi-transparente negra
-        overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 128))
-        surface.blit(overlay, (0, 0))
+    @lives.setter
+    def lives(self, value):
+        old_lives = self._lives
+        self._lives = value
+        if old_lives != value:  # Solo actualizar si cambió el número de vidas
+            self.create_hearts()
+
+    def create_hearts(self):
+        """Crea los corazones que representan las vidas del jugador"""
+        self.hearts = []
+        heart_spacing = 50  # Aumentado para más espacio entre corazones
+        heart_size = 35    # Tamaño ligeramente más grande
         
-        # Renderizar texto de PAUSA con efecto
-        pause_text = render_combo_text(
-            "PAUSED",
-            GOLD,
-            WHITE,
-            True,
-            1.5
-        )
-        pause_rect = pause_text.get_rect(center=(screen_width//2, screen_height//2 - 50))
-        surface.blit(pause_text, pause_rect)
-        
-        # Instrucciones
-        if self.lost_focus:
-            resume_text = GAME_FONT.render("Click to resume", True, WHITE)
+        # Si hay más de 5 vidas, mostrar un contador
+        if self._lives > 5:
+            # Crear un corazón centrado
+            x = screen_width // 2 - heart_spacing  # Un poco a la izquierda del centro
+            y = screen_height - 60  # Un poco más arriba del borde inferior
+            self.hearts.append(Heart(x, y, heart_size))
+            self.show_lives_counter = True
         else:
-            resume_text = GAME_FONT.render("Press P to resume", True, WHITE)
-        resume_rect = resume_text.get_rect(center=(screen_width//2, screen_height//2 + 50))
-        surface.blit(resume_text, resume_rect)
+            # Crear hasta 5 corazones
+            total_width = min(self._lives, 5) * heart_spacing
+            start_x = (screen_width - total_width) // 2  # Centrar horizontalmente
+            y = screen_height - 60  # Un poco más arriba del borde inferior
+            
+            for i in range(self._lives):
+                x = start_x + (i * heart_spacing)
+                self.hearts.append(Heart(x, y, heart_size))
+            self.show_lives_counter = False
 
-    def update_combo(self):
-        # Actualizar multiplicador basado en el combo actual
-        for threshold, multiplier in sorted(self.combo_thresholds.items(), reverse=True):
-            if self.combo_count >= threshold:
-                if self.combo_multiplier != multiplier:
-                    self.combo_multiplier = multiplier
-                    # Efecto visual cuando se alcanza un nuevo multiplicador
-                    self.effects.append(ParticleEffect(
-                        screen_width//2, 50,  # Posición arriba del score
-                        COMBO_STYLES[multiplier]['color'],  # Color del combo
-                        30  # Más partículas para celebrar
-                    ))
-                break
-
-    def reset_combo(self):
-        self.combo_count = 0
-        self.combo_multiplier = 1
-
-    def spawn_enemy(self):
-        if self.spawn_timer <= 0:
-            self.enemies.append(Enemy())
-            self.spawn_timer = self.spawn_delay
+    def toggle_sound(self):
+        self.sound_enabled = not self.sound_enabled
+        if self.sound_enabled:
+            pygame.mixer.music.unpause()
+        else:
+            pygame.mixer.music.pause()
 
     def update(self):
+        if self.game_over or self.paused:
+            return
+
         self.spawn_timer -= 1
         self.spawn_enemy()
+        self.update_powerups()
 
         mouse_x, mouse_y = pygame.mouse.get_pos()
+        self.check_powerup_collision(mouse_x, mouse_y)
+
+        # Comprobar colisiones con balas
+        for enemy in self.enemies:
+            if isinstance(enemy, ShooterEnemy):
+                for projectile in enemy.projectiles[:]:
+                    if projectile.check_collision(mouse_x, mouse_y):
+                        if self.has_shield:
+                            if self.sound_enabled:
+                                play_sound('shield_break')
+                            self.has_shield = False
+                            self.effects.append(ParticleEffect(
+                                mouse_x, mouse_y,
+                                BLUE,
+                                30
+                            ))
+                            for powerup in self.active_powerups[:]:
+                                if isinstance(powerup, ShieldPowerUp):
+                                    powerup.remove_effect(self)
+                                    self.active_powerups.remove(powerup)
+                                    break
+                        else:
+                            if self.sound_enabled:
+                                play_sound('hit')
+                            self.lives -= 1
+                            self.reset_combo()
+                            self.effects.append(ParticleEffect(
+                                mouse_x, mouse_y,
+                                (255, 100, 0),  # Color naranja para las balas
+                                20
+                            ))
+                            self.screen_shake.start(20, 5)
+                            if self.lives <= 0:
+                                if self.sound_enabled:
+                                    play_sound('game_over')
+                                self.game_over = True
+                        projectile.active = False
+                        enemy.projectiles.remove(projectile)
 
         for enemy in self.enemies[:]:
             collision_result = enemy.update(mouse_x, mouse_y)
             
-            if collision_result == "body_collision":
+            if collision_result == "body_collision" or (self.berserker_mode and collision_result):
+                if self.sound_enabled:
+                    play_sound('slash')
                 self.enemies.remove(enemy)
-                # Aumentar score con multiplicador
-                self.score += 1000 * self.combo_multiplier
-                # Incrementar combo
+                self.score += 1000 * self.combo_multiplier * self.score_multiplier
                 self.combo_count += 1
                 self.update_combo()
                 
-                # Efecto de corte
                 slash_angle = enemy.angle + random.uniform(-30, 30)
+                slash_color = RED if self.berserker_mode else BLUE
                 self.effects.append(SlashEffect(
                     enemy.x, enemy.y,
                     slash_angle,
-                    BLUE,
+                    slash_color,
                     20
                 ))
-                
-                # Partículas de corte
                 self.effects.append(ParticleEffect(
                     enemy.x, enemy.y,
-                    BLUE,
+                    slash_color,
                     15
                 ))
             
             elif collision_result == "head_collision":
-                self.enemies.remove(enemy)
-                self.lives -= 1
-                # Resetear combo al ser golpeado
-                self.reset_combo()
-                
-                # Efecto de daño con partículas rojas
-                self.effects.append(ParticleEffect(
-                    mouse_x, mouse_y,
-                    RED,
-                    20
-                ))
-                
-                # Vibración de pantalla más intensa
-                self.screen_shake.start(45, 15)  # Más duración e intensidad
-                
-                if self.lives <= 0:
-                    self.game_over = True
+                if self.has_shield:
+                    if self.sound_enabled:
+                        play_sound('shield_break')
+                    self.has_shield = False
+                    self.effects.append(ParticleEffect(
+                        mouse_x, mouse_y,
+                        BLUE,
+                        30
+                    ))
+                    for powerup in self.active_powerups[:]:
+                        if isinstance(powerup, ShieldPowerUp):
+                            powerup.remove_effect(self)
+                            self.active_powerups.remove(powerup)
+                            break
+                else:
+                    if self.sound_enabled:
+                        play_sound('hit')
+                    self.enemies.remove(enemy)
+                    self.lives -= 1
+                    self.reset_combo()
+                    self.effects.append(ParticleEffect(
+                        mouse_x, mouse_y,
+                        RED,
+                        20
+                    ))
+                    self.screen_shake.start(20, 5)
+                    if self.lives <= 0:
+                        if self.sound_enabled:
+                            play_sound('game_over')
+                        self.game_over = True
 
         self.mouse_trail.update((mouse_x, mouse_y))
         self.effects = [effect for effect in self.effects if effect.update()]
@@ -660,82 +1296,270 @@ class Game:
     def draw(self, surface):
         # Crear superficie temporal con alpha
         temp_surface = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-        temp_surface.fill((0,0,0,0))
-        
-        # Dibujar todos los elementos del juego normalmente
+        temp_surface.fill((0, 0, 0, 0))  # Limpiar con transparencia
+
+        # Dibujar la estela del ratón
+        self.mouse_trail.draw(temp_surface)
+
+        # Dibujar enemigos
         for enemy in self.enemies:
             enemy.draw(temp_surface)
-        
-        # Dibujar puntuación centrada arriba
-        score_text = SCORE_FONT.render(f'{self.score:08d}', True, WHITE)
-        score_rect = score_text.get_rect(midtop=(screen_width//2, 20))
-        temp_surface.blit(score_text, score_rect)
-        
-        # Obtener el estilo del combo actual
-        style = COMBO_STYLES[self.combo_multiplier]
-        
-        # Renderizar el multiplicador con efectos
-        combo_text = render_combo_text(
-            f'x{self.combo_multiplier}{"!" * (self.combo_multiplier-1)}',
-            style['color'],
-            style['border_color'],
-            style['glow'],
-            style['scale']
-        )
-        
-        # Posicionar el multiplicador
-        combo_rect = combo_text.get_rect(midtop=(screen_width//2, 70))
-        
-        # Agregar shake si corresponde
-        if style['shake']:
-            shake_offset = (
-                random.randint(-2, 2),
-                random.randint(-2, 2)
-            )
-            combo_rect.x += shake_offset[0]
-            combo_rect.y += shake_offset[1]
-        
-        temp_surface.blit(combo_text, combo_rect)
-        
-        # Renderizar el contador de combo
-        count_style = style.copy()
-        count_style['scale'] *= 0.7
-        combo_count_text = render_combo_text(
-            f'{self.combo_count}',
-            style['color'],
-            style['border_color'],
-            style['glow'],
-            count_style['scale']
-        )
-        combo_count_rect = combo_count_text.get_rect(midtop=(screen_width//2, combo_rect.bottom + 10))
-        temp_surface.blit(combo_count_text, combo_count_rect)
-        
-        # Dibujar corazones
-        for i in range(self.lives):
-            self.hearts[i].draw(temp_surface)
-        
-        if self.game_over:
-            game_over_text = GAME_FONT.render('GAME OVER', True, RED)
-            text_rect = game_over_text.get_rect(center=(screen_width//2, screen_height//2))
-            temp_surface.blit(game_over_text, text_rect)
-            
-            restart_text = GAME_FONT.render('PRESS R TO RESTART', True, WHITE)
-            restart_rect = restart_text.get_rect(center=(screen_width//2, screen_height//2 + 50))
-            temp_surface.blit(restart_text, restart_rect)
-        
+
+        # Dibujar powerups
+        for powerup in self.powerups:
+            powerup.draw(temp_surface)
+
         # Dibujar efectos
-        self.mouse_trail.draw(temp_surface)
         for effect in self.effects:
             effect.draw(temp_surface)
+
+        # Dibujar corazones y contador de vidas
+        for heart in self.hearts:
+            heart.draw(temp_surface)
         
-        # Aplicar vibración de pantalla
-        shake_offset = self.screen_shake.get_offset()
-        surface.fill(BLACK)
-        surface.blit(temp_surface, shake_offset)
+        # Si hay más de 5 vidas, mostrar el contador
+        if hasattr(self, 'show_lives_counter') and self.show_lives_counter:
+            lives_text = render_combo_text(
+                f'x{self.lives}',
+                RED,
+                WHITE,  # Agregar borde blanco
+                True,   # Con brillo
+                1.2     # Un poco más grande
+            )
+            lives_rect = lives_text.get_rect(midleft=(screen_width//2 + 10, screen_height - 60))
+            temp_surface.blit(lives_text, lives_rect)
+
+        # Dibujar puntuación con efecto dorado si está activo
+        golden_active = False
+        for powerup in self.active_powerups:
+            if isinstance(powerup, GoldenPenePowerUp):
+                golden_active = True
+                break
+
+        if golden_active:
+            # Usar render_combo_text para el efecto dorado
+            score_text = render_combo_text(
+                f'{self.score:08d}',
+                GOLD,
+                None,  # sin borde
+                True,  # con glow
+                1.0 + abs(math.sin(pygame.time.get_ticks() * 0.003)) * 0.2  # escala pulsante
+            )
+        else:
+            score_text = SCORE_FONT.render(f'{self.score:08d}', True, WHITE)
         
-        # Dibujar menú de pausa si está pausado
+        score_rect = score_text.get_rect(midtop=(screen_width//2, 20))
+        temp_surface.blit(score_text, score_rect)
+
+        # Dibujar combo solo si es mayor a 0
+        if self.combo_count > 0:
+            combo_style = COMBO_STYLES.get(self.combo_multiplier, COMBO_STYLES[1])
+            combo_text = render_combo_text(
+                f'x{self.combo_multiplier}',
+                combo_style['color'],
+                combo_style['border_color'],
+                combo_style['glow'],
+                combo_style['scale']
+            )
+            combo_rect = combo_text.get_rect(midtop=(screen_width//2, score_rect.bottom + 10))
+            
+            if combo_style['shake']:
+                combo_rect.x += random.randint(-2, 2)
+                combo_rect.y += random.randint(-2, 2)
+            
+            temp_surface.blit(combo_text, combo_rect)
+            
+            # Dibujar contador de combo debajo
+            count_style = combo_style.copy()
+            count_style['scale'] *= 0.7
+            combo_count_text = render_combo_text(
+                str(self.combo_count),
+                combo_style['color'],
+                combo_style['border_color'],
+                combo_style['glow'],
+                count_style['scale']
+            )
+            count_rect = combo_count_text.get_rect(midtop=(screen_width//2, combo_rect.bottom + 5))
+            temp_surface.blit(combo_count_text, count_rect)
+
+        # Dibujar mensaje de pausa
         if self.paused:
-            self.draw_pause_menu(surface)
+            # Crear una capa semi-transparente negra
+            overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 128))
+            temp_surface.blit(overlay, (0, 0))
+            
+            # Renderizar texto de PAUSA con efecto
+            pause_text = render_combo_text(
+                "PAUSED",
+                GOLD,
+                WHITE,
+                True,
+                1.5
+            )
+            pause_rect = pause_text.get_rect(center=(screen_width//2, screen_height//2))
+            temp_surface.blit(pause_text, pause_rect)
+
+        # Dibujar mensaje de game over
+        if self.game_over:
+            # Crear una capa semi-transparente negra
+            overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 192))  # Más oscuro que la pausa
+            temp_surface.blit(overlay, (0, 0))
+            
+            # Renderizar GAME OVER con efecto
+            game_over_text = render_combo_text(
+                "GAME OVER",
+                RED,
+                None,
+                True,
+                2.0
+            )
+            restart_text = render_combo_text(
+                "Presiona R para reiniciar",
+                WHITE,
+                None,
+                True,
+                1.0
+            )
+            
+            game_over_rect = game_over_text.get_rect(center=(screen_width//2, screen_height//2 - 50))
+            restart_rect = restart_text.get_rect(center=(screen_width//2, screen_height//2 + 50))
+            
+            temp_surface.blit(game_over_text, game_over_rect)
+            temp_surface.blit(restart_text, restart_rect)
+
+        # Aplicar screen shake solo si está activo
+        shake_offset = self.screen_shake.get_offset()
+        if shake_offset != (0, 0):
+            surface.fill((0, 0, 0, 0))  # Limpiar la superficie principal
+            surface.blit(temp_surface, shake_offset)
+        else:
+            surface.fill((0, 0, 0, 0))
+            surface.blit(temp_surface, (0, 0))
+
+    def update_combo(self):
+        """Actualiza el multiplicador de combo basado en el contador actual"""
+        old_multiplier = self.combo_multiplier
+        for threshold, multiplier in sorted(self.combo_thresholds.items()):
+            if self.combo_count >= threshold:
+                self.combo_multiplier = multiplier
+        
+        if self.combo_multiplier > old_multiplier:
+            if self.sound_enabled:
+                play_sound('combo')
+            # Efecto visual para el nuevo multiplicador
+            self.effects.append(FloatingTextEffect(
+                screen_width//2,
+                screen_height//2,
+                f"¡COMBO x{self.combo_multiplier}!",
+                GOLD,
+                1500,
+                scale=1.5,
+                shake=True
+            ))
+
+    def reset_combo(self):
+        """Reinicia el contador y multiplicador de combo"""
+        self.combo_count = 0
+        self.combo_multiplier = 1
+
+    def spawn_enemy(self):
+        """Genera nuevos enemigos basados en el temporizador"""
+        if self.spawn_timer <= 0:
+            # Probabilidades de spawn para cada tipo de enemigo
+            enemy_types = [
+                (NormalEnemy, 0.4),
+                (SplitEnemy, 0.2),
+                (ShooterEnemy, 0.2),
+                (FastEnemy, 0.2)
+            ]
+            
+            # Seleccionar tipo de enemigo basado en probabilidades
+            total_prob = sum(prob for _, prob in enemy_types)
+            r = random.uniform(0, total_prob)
+            cumulative = 0
+            selected_type = None
+            
+            for enemy_type, prob in enemy_types:
+                cumulative += prob
+                if r <= cumulative:
+                    selected_type = enemy_type
+                    break
+            
+            if selected_type:
+                self.enemies.append(selected_type())
+            
+            # Reducir el delay de spawn gradualmente
+            self.spawn_delay = max(30, self.spawn_delay - 0.1)
+            self.spawn_timer = self.spawn_delay
+
+    def update_powerups(self):
+        """Actualiza el sistema de powerups"""
+        # Actualizar temporizador de spawn
+        self.powerup_spawn_timer -= 1
+        if self.powerup_spawn_timer <= 0:
+            # Probabilidades de spawn para cada tipo de powerup
+            powerup_types = [
+                (ShieldPowerUp, 0.3),
+                (SlowMotionPowerUp, 0.3),
+                (BerserkerPowerUp, 0.2),
+                (GoldenPenePowerUp, 0.2)
+            ]
+            
+            # Seleccionar tipo de powerup
+            total_prob = sum(prob for _, prob in powerup_types)
+            r = random.uniform(0, total_prob)
+            cumulative = 0
+            selected_type = None
+            
+            for powerup_type, prob in powerup_types:
+                cumulative += prob
+                if r <= cumulative:
+                    selected_type = powerup_type
+                    break
+            
+            if selected_type:
+                # Generar en una posición aleatoria dentro de la pantalla
+                x = random.randint(100, screen_width - 100)
+                y = random.randint(100, screen_height - 100)
+                self.powerups.append(selected_type(x, y))
+            
+            self.powerup_spawn_timer = self.powerup_spawn_delay
+        
+        # Actualizar powerups activos
+        for powerup in self.active_powerups[:]:
+            if not powerup.update():
+                powerup.remove_effect(self)
+                self.active_powerups.remove(powerup)
+        
+        # Actualizar powerups en el campo
+        for powerup in self.powerups[:]:
+            if not powerup.update():
+                self.powerups.remove(powerup)
+
+    def check_powerup_collision(self, mouse_x, mouse_y):
+        """Comprueba si el jugador recoge algún powerup"""
+        for powerup in self.powerups[:]:
+            dx = mouse_x - powerup.x
+            dy = mouse_y - powerup.y
+            distance = math.sqrt(dx * dx + dy * dy)
+            
+            if distance < powerup.radius:
+                if self.sound_enabled:
+                    play_sound('powerup')
+                powerup.collect()
+                powerup.apply_effect(self)
+                self.active_powerups.append(powerup)
+                self.powerups.remove(powerup)
+
+    def toggle_pause(self):
+        """Alterna el estado de pausa del juego"""
+        self.paused = not self.paused
+        if self.paused:
+            pygame.mixer.music.pause()
+        else:
+            pygame.mixer.music.unpause()
 
 def main():
     clock = pygame.time.Clock()
@@ -758,6 +1582,8 @@ def main():
                     game = Game()
                 elif event.key == pygame.K_p and not game.game_over:
                     game.toggle_pause()
+                elif event.key == pygame.K_m:  # Tecla M para mutear/desmutear
+                    game.toggle_sound()
             elif event.type == pygame.ACTIVEEVENT:
                 if event.state == 2:  # Estado de foco de ventana
                     if not event.gain:  # Perdió el foco
